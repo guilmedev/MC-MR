@@ -2,10 +2,46 @@ using UnityEngine;
 
 public class PaintableObject : MonoBehaviour
 {
-    public Texture2D runtimeAlbedo; // A textura que será alterada
+    [SerializeField]
+    private Texture2D runtimeAlbedo; // A textura que será alterada
     private Renderer rend;
 
+    public bool GenerateTexutre = true;
+
+
+
     private void Awake()
+    {
+        if (GenerateTexutre)
+        {
+            GenerateTexture();
+        }
+        else
+        {
+            CleanUpTexuture();
+        }
+    }
+
+    private void CleanUpTexuture()
+    {
+        // preenche a textura com branco
+        if (runtimeAlbedo != null)
+        {
+            Color[] albedoPixels = new Color[runtimeAlbedo.width * runtimeAlbedo.height];
+            for (int i = 0; i < albedoPixels.Length; i++)
+            {
+                albedoPixels[i] = Color.white;
+            }
+            runtimeAlbedo.SetPixels(albedoPixels);
+            runtimeAlbedo.Apply();
+        }
+    }
+
+    public void UpdateTexture(Texture2D newTexture)
+    {
+        runtimeAlbedo = newTexture;
+    }
+    private void GenerateTexture()
     {
         rend = GetComponent<Renderer>();
 
@@ -41,7 +77,7 @@ public class PaintableObject : MonoBehaviour
         int radiusInt = Mathf.RoundToInt(radius);
 
         // Proteção para raio muito pequeno
-        if (radiusInt < 1) radiusInt = 1;
+        if (radiusInt < 10) radiusInt = 10;
         for (int y = -radiusInt; y <= radiusInt; y++)
         {
             for (int x = -radiusInt; x <= radiusInt; x++)

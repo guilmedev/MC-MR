@@ -82,7 +82,7 @@ public class ColorPicker : MonoBehaviour
     {
         UpdateSamplingPoint();
 
-        if (OVRInput.GetUp(OVRInput.Button.One))
+        if (OVRInput.GetUp(OVRInput.Button.Two))
         {
             PickColor();
         }

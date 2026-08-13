@@ -1,7 +1,11 @@
 using UnityEngine;
+using static OVRInput;
 
 public class QuestPainter : MonoBehaviour
 {
+    [SerializeField]
+    private Controller controller;
+
     [Range(0.01f, 100f)]
     private float bushRadius = 10f; // Raio do pincel em pixels
     [Header("Environment Sampling")]
@@ -17,9 +21,16 @@ public class QuestPainter : MonoBehaviour
 
     void Update()
     {
-        if (OVRInput.Get(OVRInput.Button.Two))
+
+        lineRenderer.enabled = true;
+        lineRenderer.SetPosition(0, raySampleOrigin.position);
+        // Corrigido: Posição final da linha deve ser origem + direção * comprimento
+        lineRenderer.SetPosition(1, raySampleOrigin.position + raySampleOrigin.forward * rayLength);
+
+
+        if (OVRInput.Get(OVRInput.Button.PrimaryIndexTrigger, controller))
         {
-            Debug.Log("Button Two released, performing raycast paint.");
+            Debug.Log("performing raycast paint.");
             PerformRaycastPaint();
         }
         else
@@ -29,12 +40,13 @@ public class QuestPainter : MonoBehaviour
         }
 
         HandleBrushSize();
+
     }
 
     private void HandleBrushSize()
     {
         // aumenta ou diminui o raio do pincel baseado no direcional do joystick
-        float joystickY = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick).y;
+        float joystickY = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, controller).y;
         if (joystickY > 0.1f)
         {
             bushRadius += joystickY * Time.deltaTime * 20f; // Ajuste a velocidade de aumento conforme necessário
@@ -62,10 +74,7 @@ public class QuestPainter : MonoBehaviour
         Ray ray = new Ray(raySampleOrigin.position, raySampleOrigin.forward);
         Debug.DrawRay(ray.origin, ray.direction * rayLength, Color.red, 1f);
 
-        lineRenderer.enabled = true;
-        lineRenderer.SetPosition(0, ray.origin);
-        // Corrigido: Posição final da linha deve ser origem + direção * comprimento
-        lineRenderer.SetPosition(1, ray.origin + ray.direction * rayLength);
+
 
         RaycastHit hit;
 
@@ -74,11 +83,30 @@ public class QuestPainter : MonoBehaviour
             PaintableObject paintable = hit.collider.GetComponent<PaintableObject>();
             if (paintable != null)
             {
-                // Importante: hit.textureCoord só funciona se o objeto tiver MeshCollider!
-                Debug.Log("Painting at UV: " + hit.textureCoord + " with color: " + brushSettings.color + " and radius: " + brushSettings.radius);
+                // Corrigido: Posição final da linha deve ser origem + direção * comprimento
+                lineRenderer.SetPosition(1, hit.point);
 
-                // O raio precisa ser em pixels (ex: 10, 50). Não use valores pequenos como 0.1
-                paintable.PaintAt(hit.textureCoord, brushSettings.color, brushSettings.radius);
+                try
+                {
+                    // Importante: hit.textureCoord só funciona se o objeto tiver MeshCollider com UVs em float32!
+                    Vector2 textureCoord = hit.textureCoord;
+                    Debug.Log("Painting at UV: " + textureCoord + " with color: " + brushSettings.color + " and radius: " + brushSettings.radius);
+
+                    // O raio precisa ser em pixels (ex: 10, 50). Não use valores pequenos como 0.1
+                    paintable.PaintAt(textureCoord, brushSettings.color, brushSettings.radius);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("Failed to get texture coordinates: " + e.Message +
+                        "\nEnsure the mesh collider uses a mesh with float32 UV format." +
+                        "\nCheck: Model Import Settings > Meshes > Optimize Mesh");
+
+                    // Fallback: use hit.point instead
+                    if (paintable != null)
+                    {
+                        paintable.PaintAt(hit.point, brushSettings.color, brushSettings.radius);
+                    }
+                }
 
                 // --- Atualiza o indicador visual ---
                 if (brushIndicator != null)
