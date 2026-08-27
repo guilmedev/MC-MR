@@ -16,7 +16,8 @@ Using a Meta Quest 3 and in a MixedReality scope the app uses the folowing techn
     - To have colorPicker from camera
 - [Unity animation rigging](https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.0/manual/index.html)
     - Create custom poses for the model
-
+- [Meta Brightness Estimation](https://developers.meta.com/horizon/documentation/unity/unity-sample-camera-brightness/)
+    - Use the Brightness Estimation to react to the environment 
 
 ## Results
 
