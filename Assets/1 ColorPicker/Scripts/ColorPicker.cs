@@ -11,13 +11,8 @@ public enum SamplingMode
 
 public class ColorPicker : MonoBehaviour
 {
-    public QuestPainter questPainter;
-
-    [SerializeField] private SamplingMode samplingMode = SamplingMode.Environment;
-
     [Header("Environment Sampling")]
     [SerializeField] private Transform raySampleOrigin;
-    [SerializeField] private LineRenderer lineRenderer;
 
     [Header("Manual Sampling")]
     [SerializeField] private Transform manualSamplingOrigin;
@@ -30,8 +25,6 @@ public class ColorPicker : MonoBehaviour
     [SerializeField] private float maxCorrection = 1.5f;
 
     private float _prevCorrectionFactor = 1f;
-    private Vector3? _lastHitPoint;
-    private Camera _mainCamera;
     private Renderer _manualRenderer;
     [SerializeField] private PassthroughCameraAccess cameraAccess;
     private EnvironmentRaycastManager _raycastManager;
@@ -39,13 +32,10 @@ public class ColorPicker : MonoBehaviour
 
     private void Start()
     {
-        _mainCamera = Camera.main;
         cameraAccess = ResolveCameraAccess(cameraAccess);
         _raycastManager = GetComponent<EnvironmentRaycastManager>();
 
-        if (!_mainCamera || !cameraAccess || !_raycastManager ||
-            (samplingMode == SamplingMode.Environment && !raySampleOrigin) ||
-            (samplingMode == SamplingMode.Manual && !manualSamplingOrigin))
+        if (!cameraAccess || !_raycastManager || !raySampleOrigin)
         {
             Debug.Log("ColorPicker: Missing required references.");
             return;
@@ -56,7 +46,6 @@ public class ColorPicker : MonoBehaviour
             _manualRenderer = manualSamplingOrigin.GetComponent<Renderer>();
         }
 
-        SetupLineRenderer();
         StartCoroutine(WaitForCameraFeed());
     }
 
@@ -78,86 +67,63 @@ public class ColorPicker : MonoBehaviour
         _cameraResolution = cameraAccess ? cameraAccess.CurrentResolution : Vector2Int.zero;
     }
 
-    private void Update()
+    public bool ProcessPickColor(LineRenderer lineRenderer, out Color sampledColor)
     {
-        UpdateSamplingPoint();
-
-        if (OVRInput.GetUp(OVRInput.Button.Two))
-        {
-            PickColor();
-        }
-    }
-
-    private void UpdateSamplingPoint()
-    {
-        if (samplingMode == SamplingMode.Environment)
-        {
-            Ray ray = new(raySampleOrigin.position, raySampleOrigin.forward);
-            var hitSuccess = _raycastManager.Raycast(ray, out var hit);
-
-            lineRenderer.enabled = true;
-            lineRenderer.SetPosition(0, ray.origin);
-            lineRenderer.SetPosition(1, hitSuccess ? hit.point : ray.origin + ray.direction * 5f);
-
-            _lastHitPoint = hitSuccess ? hit.point : null;
-        }
-        else
-        {
-            lineRenderer.enabled = false;
-            _lastHitPoint = manualSamplingOrigin.position;
-        }
-    }
-
-    private void PickColor()
-    {
-        if (_lastHitPoint == null ) return;
-
-
-        if ( !cameraAccess)
+        sampledColor = Color.clear;
+        if (!cameraAccess)
         {
             Debug.Log("No camera Access found.");
-            return;
+            return false;
         }
 
-        
         if (!cameraAccess.IsPlaying)
         {
             Debug.Log("Passthrough feed not ready.");
-            return;
+            return false;
         }
-        
-        if (_lastHitPoint == null || !cameraAccess || !cameraAccess.IsPlaying)
+
+        Ray ray = new(raySampleOrigin.position, raySampleOrigin.forward);
+        var hitSuccess = _raycastManager.Raycast(ray, out var hit);
+        if (!hitSuccess)
         {
-            Debug.Log("ColorPicker: Invalid sampling point or passthrough feed not ready.");
-            return;
+            Debug.Log("ColorPicker: No environment hit to sample.");
+            return false;
+        }
+
+        if (lineRenderer)
+        {
+            lineRenderer.SetPosition(0, ray.origin);
+            lineRenderer.SetPosition(1, hit.point);
         }
 
         _cameraResolution = cameraAccess.CurrentResolution;
-        if (_cameraResolution == Vector2Int.zero || !TryGetPixelCoordinate(_lastHitPoint.Value, out var pixel))
+        if (_cameraResolution == Vector2Int.zero || !TryGetPixelCoordinate(hit.point, out var pixel))
         {
             Debug.Log("ColorPicker: Unable to project sampling point onto the camera.");
-            return;
+            return false;
         }
 
         var colors = cameraAccess.GetColors();
         if (!colors.IsCreated)
         {
             Debug.Log("ColorPicker: Camera colors not ready.");
-            return;
+            return false;
         }
 
-        var color = SampleAndCorrectColor(pixel, colors, _cameraResolution);
+        sampledColor = SampleAndCorrectColor(pixel, colors, _cameraResolution);
 
         if (_manualRenderer)
         {
-            _manualRenderer.material.color = color;
-
+            _manualRenderer.material.color = sampledColor;
         }
 
-        if (questPainter)
+        if (lineRenderer)
         {
-            questPainter.UpdateColor(color);
+            lineRenderer.startColor = sampledColor;
+            lineRenderer.endColor = sampledColor;
         }
+
+        return true;
     }
 
     private bool TryGetPixelCoordinate(Vector3 worldPoint, out Vector2Int pixel)
@@ -217,15 +183,4 @@ public class ColorPicker : MonoBehaviour
         return count > 0 ? sum / count : 0f;
     }
 
-    private void SetupLineRenderer()
-    {
-        if (!lineRenderer)
-        {
-            return;
-        }
-
-        lineRenderer.enabled = true;
-        lineRenderer.positionCount = 2;
-        lineRenderer.startWidth = lineRenderer.endWidth = 0.01f;
-    }
 }
